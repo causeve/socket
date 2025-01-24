@@ -386,7 +386,7 @@ esp_err_t render_ui(httpd_req_t *req) {
         "    <script src=\"/main.js\"></script>"
         "</head>"
         "<body>"
-        "    <h1>LED Scheduler</h1>"
+        "    <h1>Timer Scheduler</h1>"
         "    <h2>Current Time</h2>"
         "    <span id=\"rtc-time\">RTC - HH:MM</span>"
         "    <button id=\"update-rtc-btn\">Update RTC</button>"
@@ -409,6 +409,9 @@ esp_err_t render_ui(httpd_req_t *req) {
         "    <br>"
         "    <button onclick=\"editSchedules()\">Edit</button>"
         "    <button onclick=\"submitSchedules()\">Submit</button>"
+        "    <footer>"
+        "        <p>&copy; 2025 Causeve. All rights reserved.</p>"
+        "    </footer>"
         "</body>"
         "</html>";
 
@@ -795,7 +798,7 @@ esp_err_t update_schedules_handler(httpd_req_t *req) {
             cJSON *days_json = cJSON_GetObjectItem(schedule_json, "days");
             if (!cJSON_IsNumber(days_json) || days_json->valueint == 0) {
                 ESP_LOGE("update_schedules_handler", "Invalid days bitmask in enabled schedule %d", schedule_count);
-                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid days bitmask in enabled schedule");
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Select Days in enabled schedule");
                 cJSON_Delete(json);
                 return ESP_FAIL;
             }
@@ -823,7 +826,7 @@ esp_err_t update_schedules_handler(httpd_req_t *req) {
             if (new_schedule.start_hour > new_schedule.end_hour ||
                 (new_schedule.start_hour == new_schedule.end_hour && new_schedule.start_min >= new_schedule.end_min)) {
                 ESP_LOGE("update_schedules_handler", "Invalid time range in enabled schedule %d", schedule_count);
-                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid time range in enabled schedule");
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "start time is not earlier than end time in enabled schedule");
                 cJSON_Delete(json);
                 return ESP_FAIL;
             }
@@ -1369,7 +1372,7 @@ void start_hotspot() {
             .ssid = HOTSPOT_SSID,
             .ssid_len = strlen(HOTSPOT_SSID),
             .password = HOTSPOT_PASSWORD,
-            .max_connection = 4,
+            .max_connection = 1,
             .authmode = WIFI_AUTH_WPA2_PSK,
         },
     };
