@@ -22,6 +22,8 @@
 #define SWITCH_GPIO GPIO_NUM_33  // GPIO connected to the switch
 #define PRESS_DURATION 2000    // 2 seconds in milliseconds
 
+#define HOTSPOT_LED_PIN 26  // Example GPIO pin for the hotspot LED
+
 // State tracking for hotspot mode
 bool hotspot_active = false;
 
@@ -324,6 +326,31 @@ void init_leds() {
 }
 
 
+
+void gpio_init() {
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << HOTSPOT_LED_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io_conf);
+
+    // Turn off the hotspot LED initially
+    gpio_set_level(HOTSPOT_LED_PIN, 0);
+}
+
+
+void update_hotspot_led(bool hotspot_enabled) {
+    if (hotspot_enabled) {
+        gpio_set_level(HOTSPOT_LED_PIN, 1);  // Turn ON LED
+        ESP_LOGI("Hotspot", "Hotspot LED turned ON");
+    } else {
+        gpio_set_level(HOTSPOT_LED_PIN, 0);  // Turn OFF LED
+        ESP_LOGI("Hotspot", "Hotspot LED turned OFF");
+    }
+}
 
 // Function to save a schedule to EEPROM
 void save_schedules_to_eeprom() {
@@ -1382,14 +1409,20 @@ void start_hotspot() {
     if (esp_wifi_start() == ESP_OK) {
         printf("Hotspot started. SSID: %s, Password: %s\n", HOTSPOT_SSID, HOTSPOT_PASSWORD);
         start_http_server();
+            // Enable hotspot LED
+    	update_hotspot_led(true);
     } else {
         printf("Failed to start hotspot.\n");
+            // Disable hotspot LED
+    update_hotspot_led(false);
     }
 }
 
 void stop_hotspot() {
     esp_wifi_stop();
     printf("Hotspot deactivated. Returning to normal mode.\n");
+        // Disable hotspot LED
+    update_hotspot_led(false);
 }
 
 
@@ -1501,11 +1534,21 @@ void update_led_schedule(bool wifi_mode_enabled) {
             }
 
             // Check if the current time falls within the schedule's time range
-            bool within_time_range = 
-                (rtc_time.tm_hour > schedule->start_hour || 
-                (rtc_time.tm_hour == schedule->start_hour && rtc_time.tm_min >= schedule->start_min)) &&
-                (rtc_time.tm_hour < schedule->end_hour || 
-                (rtc_time.tm_hour == schedule->end_hour && rtc_time.tm_min <= schedule->end_min));
+            bool within_time_range = false ;
+			// Check if the current time is strictly within the range
+			if (rtc_time.tm_hour > schedule->start_hour ||
+			    (rtc_time.tm_hour == schedule->start_hour && rtc_time.tm_min >= schedule->start_min)) {
+			    if (rtc_time.tm_hour < schedule->end_hour ||
+			        (rtc_time.tm_hour == schedule->end_hour && rtc_time.tm_min < schedule->end_min)) {
+			        within_time_range = true;
+			    }
+			}
+			
+			// Ensure precise OFF action at the exact end time
+			bool at_exact_end_time = (rtc_time.tm_hour == schedule->end_hour && rtc_time.tm_min == schedule->end_min);
+			if (at_exact_end_time) {
+			    within_time_range = false;  // Explicitly turn OFF at the exact end time
+			}
 
             // Update the LED state based on the schedule
             int new_state = within_time_range ? 1 : 0;
@@ -1520,7 +1563,7 @@ void update_led_schedule(bool wifi_mode_enabled) {
 void scheduler_task(void *param) {
     while (true) {
         update_led_schedule(hotspot_active); // Pass Wi-Fi mode status
-        vTaskDelay(pdMS_TO_TICKS(60000)); // Run every minute
+        vTaskDelay(pdMS_TO_TICKS(10000)); // Run every minute
     }
 }
 

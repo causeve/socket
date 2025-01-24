@@ -7,7 +7,6 @@
 #include "driver/i2c.h"
 #include <stdio.h>
 #include <time.h>
-#include "html.h"
 #include "esp_http_server.h"
 #include "ds3231.h"
 #include "ui_scheduler.h"
@@ -108,7 +107,7 @@ void app_main() {
    xTaskCreate(scheduler_task, "Switch Monitor Task", 4096, NULL, 10, NULL);
     while (1) {
 		
-		sync_ui_with_rtc_task(NULL);
+		//sync_ui_with_rtc_task(NULL);
 		
       /*          if (ds3231_get_time(&dev, &time) != ESP_OK)
         {
