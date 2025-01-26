@@ -22,7 +22,7 @@
 #define SWITCH_GPIO GPIO_NUM_33  // GPIO connected to the switch
 #define PRESS_DURATION 2000    // 2 seconds in milliseconds
 
-#define HOTSPOT_LED_PIN 26  // Example GPIO pin for the hotspot LED
+#define HOTSPOT_LED_PIN GPIO_NUM_27  // Example GPIO pin for the hotspot LED
 
 // State tracking for hotspot mode
 bool hotspot_active = false;
@@ -1164,6 +1164,7 @@ esp_err_t get_leds_handler(httpd_req_t *req) {
 }
 
 // Function to calculate the day of the week using Zeller's Congruence
+// Function to calculate the day of the week using Zeller's Congruence
 static int calculate_weekday(int year, int month, int day) {
     if (month < 3) {
         month += 12;
@@ -1172,8 +1173,14 @@ static int calculate_weekday(int year, int month, int day) {
     int K = year % 100; // Year within the century
     int J = year / 100; // Century
     int weekday = (day + (13 * (month + 1)) / 5 + K + (K / 4) + (J / 4) - (2 * J)) % 7;
-    return ((weekday + 6) % 7)+1; // Convert to 1 = Sunday, 7 = Saturday
+
+    // Normalize to match DS3231: 0 = Sunday, ..., 6 = Saturday
+    return (weekday + 6) % 7;
 }
+
+
+
+
 
 // Function to handle RTC updates
 esp_err_t update_rtc_handler(httpd_req_t *req) {
@@ -1528,7 +1535,7 @@ void update_led_schedule(bool wifi_mode_enabled) {
             }
 
             // Check if the current weekday matches the schedule's days bitmask
-            if (!(schedule->days & (1 << (rtc_time.tm_wday - 1)))) {
+            if (!(schedule->days & (1 << (rtc_time.tm_wday)))) {
                 ESP_LOGD(TAG, "Schedule %d for LED %s does not match the current weekday.", j, led->name);
                 continue;
             }
@@ -1561,6 +1568,19 @@ void update_led_schedule(bool wifi_mode_enabled) {
 
 
 void scheduler_task(void *param) {
+	/*
+	    struct tm time = {
+        .tm_year = 2025 -1900, //since 1900 (2016 - 1900)
+        .tm_mon  = 0,  // 0-based
+        .tm_mday = 26,
+        .tm_hour = 23,
+        .tm_min  = 58,
+        .tm_sec  = 10,
+        .tm_wday = 6
+        };
+  
+    ESP_ERROR_CHECK(ds3231_set_time(&dev, &time));
+	    */
     while (true) {
         update_led_schedule(hotspot_active); // Pass Wi-Fi mode status
         vTaskDelay(pdMS_TO_TICKS(10000)); // Run every minute
