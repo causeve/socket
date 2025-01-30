@@ -13,10 +13,11 @@
 #include "soc/gpio_num.h"
 #include "esp_log.h"
 
+
 #define MAX_LEDS 2
 #define MAX_SCHEDULES_PER_LED 3
 
-#define HOTSPOT_SSID "ESP32_Hotspot"
+#define HOTSPOT_SSID "Yoogi_Timer"
 #define HOTSPOT_PASSWORD "password123" // Set a secure password
 
 #define SWITCH_GPIO GPIO_NUM_33  // GPIO connected to the switch
@@ -318,12 +319,6 @@ esp_err_t eeprom_read(i2c_dev_t *dev, uint16_t address, uint8_t *data, size_t le
     return ret;
 }
 
-void init_leds() {
-    for (int i = 0; i < MAX_LEDS; i++) {
-        gpio_set_direction(leds[i].gpio_pin, GPIO_MODE_OUTPUT);
-        gpio_set_level(leds[i].gpio_pin, 0); // Initially turn off LEDs
-    }
-}
 
 
 
@@ -336,10 +331,21 @@ void gpio_init() {
         .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config(&io_conf);
-
+  gpio_set_pull_mode(HOTSPOT_LED_PIN,  GPIO_PULLDOWN_ONLY);
     // Turn off the hotspot LED initially
     gpio_set_level(HOTSPOT_LED_PIN, 0);
 }
+
+void init_leds() {
+    for (int i = 0; i < MAX_LEDS; i++) {
+        gpio_set_direction(leds[i].gpio_pin, GPIO_MODE_OUTPUT);
+        gpio_set_pull_mode(leds[i].gpio_pin,  GPIO_PULLUP_ONLY);
+        gpio_set_level(leds[i].gpio_pin, 1); // Initially turn off LEDs
+    }
+    
+    gpio_init();
+}
+
 
 
 void update_hotspot_led(bool hotspot_enabled) {
@@ -1501,6 +1507,7 @@ void switch_monitor_task(void *param) {
 
 #define TAG "LED Scheduler"
 
+#if 0
 // Function to update LED states based on schedules
 void update_led_schedule(bool wifi_mode_enabled) {
     // Check if Wi-Fi mode is enabled
@@ -1558,15 +1565,173 @@ void update_led_schedule(bool wifi_mode_enabled) {
 			}
 
             // Update the LED state based on the schedule
-            int new_state = within_time_range ? 1 : 0;
+            int new_state = within_time_range ? 0 : 1;
             gpio_set_level(led->gpio_pin, new_state);
             ESP_LOGI(TAG, "LED %s (GPIO %d) turned %s based on schedule %d.",
-                     led->name, led->gpio_pin, new_state ? "ON" : "OFF", j);
+                     led->name, led->gpio_pin, new_state ? "OFF" : "ON", j);
         }
     }
 }
 
+#endif
 
+void update_led_schedule(bool wifi_mode_enabled) {
+    if (wifi_mode_enabled) {
+        ESP_LOGI(TAG, "Hotspot mode active, skipping schedule updates.");
+        return; // Skip processing while in hotspot mode
+    }
+
+    // Get the current time from the RTC
+    struct tm rtc_time;
+    if (ds3231_get_time(&dev, &rtc_time) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get RTC time.");
+        return;
+    }
+    
+        ESP_LOGI(TAG, "Current time: %04d-%02d-%02d %02d:%02d:%02d, Weekday: %d",
+             rtc_time.tm_year + 1900, rtc_time.tm_mon + 1, rtc_time.tm_mday,
+             rtc_time.tm_hour, rtc_time.tm_min, rtc_time.tm_sec, rtc_time.tm_wday);
+
+    // Iterate through all LEDs
+    for (int i = 0; i < MAX_LEDS; i++) {
+        led_t *led = &leds[i];
+
+        bool should_be_on = false; // Track whether any schedule keeps LED ON
+
+        // Iterate through schedules for the current LED
+        for (int j = 0; j < MAX_SCHEDULES_PER_LED; j++) {
+            schedule_t *schedule = &led->schedules[j];
+
+            // **NEW LOGIC: Track previous enabled state**
+            static bool previous_schedule_state[MAX_LEDS][MAX_SCHEDULES_PER_LED] = {false};
+
+            if (previous_schedule_state[i][j] && !schedule->enabled) {
+                ESP_LOGI(TAG, "Schedule %d for LED %s was disabled, forcing LED OFF.", j, led->name);
+                gpio_set_level(led->gpio_pin, 1); // Turn OFF the LED (assuming HIGH = OFF)
+                previous_schedule_state[i][j] = false;
+                continue;
+            }
+
+            // If the schedule is disabled, move to the next one
+            if (!schedule->enabled) {
+                ESP_LOGD(TAG, "Schedule %d for LED %s is disabled.", j, led->name);
+                continue;
+            }
+
+            // Store the schedule state for future comparisons
+            previous_schedule_state[i][j] = schedule->enabled;
+
+            // Check if the schedule applies to today
+            if (!(schedule->days & (1 << rtc_time.tm_wday))) {
+                ESP_LOGD(TAG, "Schedule %d for LED %s does not match today's weekday.", j, led->name);
+                continue;
+            }
+
+            // Check if the current time falls within the schedule's time range
+            bool within_time_range = false;
+            if (rtc_time.tm_hour > schedule->start_hour ||
+                (rtc_time.tm_hour == schedule->start_hour && rtc_time.tm_min >= schedule->start_min)) {
+                if (rtc_time.tm_hour < schedule->end_hour ||
+                    (rtc_time.tm_hour == schedule->end_hour && rtc_time.tm_min < schedule->end_min)) {
+                    within_time_range = true;
+                }
+            }
+
+            // Ensure precise OFF action at exact end time
+            bool at_exact_end_time = (rtc_time.tm_hour == schedule->end_hour && rtc_time.tm_min == schedule->end_min);
+            if (at_exact_end_time) {
+                within_time_range = false; // Explicitly turn OFF at the exact end time
+            }
+
+            // If any schedule says LED should be ON, track it
+            if (within_time_range) {
+                should_be_on = true;
+            }
+        }
+
+        // **Only change LED state at the end of checking all schedules**
+        int new_state = should_be_on ? 0 : 1; // LOW = ON, HIGH = OFF
+        gpio_set_level(led->gpio_pin, new_state);
+        ESP_LOGI(TAG, "LED %s (GPIO %d) turned %s.",
+                 led->name, led->gpio_pin, new_state ? "OFF" : "ON");
+    }
+}
+
+#if 0
+void update_led_schedule_old(bool wifi_mode_enabled) {
+	
+	            // **NEW LOGIC: Check if a previously enabled schedule was disabled**
+    static bool previous_schedule_state[MAX_LEDS][MAX_SCHEDULES_PER_LED] = {false};
+    if (wifi_mode_enabled) {
+        ESP_LOGI(TAG, "Hotspot mode active, skipping schedule updates.");
+        return; // Skip processing while in hotspot mode
+    }
+
+    // Get the current time from the RTC
+    struct tm rtc_time;
+    if (ds3231_get_time(&dev, &rtc_time) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to get RTC time.");
+        return;
+    }
+
+    // Iterate through all LEDs
+    for (int i = 0; i < MAX_LEDS; i++) {
+        led_t *led = &leds[i];
+
+        // Iterate through schedules for the current LED
+        for (int j = 0; j < MAX_SCHEDULES_PER_LED ; j++) {
+            schedule_t *schedule = &led->schedules[j];
+
+
+
+            if (previous_schedule_state[i][j] && !schedule->enabled) {
+                // The schedule was disabled after being active
+                ESP_LOGI(TAG, "Schedule %d for LED %s was disabled, forcing LED OFF.", j, led->name);
+                gpio_set_level(led->gpio_pin, 1); // Turn OFF the LED (assuming HIGH = OFF)
+                previous_schedule_state[i][j] = false; // Reset previous state
+                continue; // Skip further processing for this schedule
+            }
+
+            // If the schedule is disabled, move to the next one
+            if (!schedule->enabled) {
+                ESP_LOGD(TAG, "Schedule %d for LED %s is disabled.", j, led->name);
+                continue;
+            }
+
+            // Store the schedule state for future comparisons
+            previous_schedule_state[i][j] = schedule->enabled;
+
+            // Check if the schedule applies to today
+            if (!(schedule->days & (1 << rtc_time.tm_wday))) {
+                ESP_LOGD(TAG, "Schedule %d for LED %s does not match today's weekday.", j, led->name);
+                continue;
+            }
+
+            // Check if the current time falls within the schedule's time range
+            bool within_time_range = false;
+            if (rtc_time.tm_hour > schedule->start_hour ||
+                (rtc_time.tm_hour == schedule->start_hour && rtc_time.tm_min >= schedule->start_min)) {
+                if (rtc_time.tm_hour < schedule->end_hour ||
+                    (rtc_time.tm_hour == schedule->end_hour && rtc_time.tm_min < schedule->end_min)) {
+                    within_time_range = true;
+                }
+            }
+
+            // Ensure precise OFF action at exact end time
+            bool at_exact_end_time = (rtc_time.tm_hour == schedule->end_hour && rtc_time.tm_min == schedule->end_min);
+            if (at_exact_end_time) {
+                within_time_range = false; // Explicitly turn OFF at the exact end time
+            }
+
+            // Set the LED state based on schedule
+            int new_state = within_time_range ? 0 : 1; // LOW = ON, HIGH = OFF
+            gpio_set_level(led->gpio_pin, new_state);
+            ESP_LOGI(TAG, "LED %s (GPIO %d) turned %s based on schedule %d.",
+                     led->name, led->gpio_pin, new_state ? "OFF" : "ON", j);
+        }
+    }
+}
+#endif
 void scheduler_task(void *param) {
 	/*
 	    struct tm time = {

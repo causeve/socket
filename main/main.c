@@ -12,6 +12,7 @@
 #include "ui_scheduler.h"
 #include "esp_wifi.h"
 
+
 #define CHECK_ARG(ARG) do { if (!(ARG)) return ESP_ERR_INVALID_ARG; } while (0)
  i2c_dev_t dev;
  i2c_dev_t eeprom;
