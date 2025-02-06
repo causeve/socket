@@ -12,6 +12,25 @@
 #include "freertos/timers.h"
 #include "soc/gpio_num.h"
 #include "esp_log.h"
+#include <ctype.h>
+
+#define LOGGING_ENABLED 0  // 0-disable 1-enable
+
+#if LOGGING_ENABLED == 1
+    // Logging is enabled
+    #define ESP_LOGE(tag, format, ...) ESP_LOG_LEVEL_LOCAL(ESP_LOG_ERROR,   tag, format, ##__VA_ARGS__)
+    #define ESP_LOGW(tag, format, ...) ESP_LOG_LEVEL_LOCAL(ESP_LOG_WARN,    tag, format, ##__VA_ARGS__)
+    #define ESP_LOGI(tag, format, ...) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+    #define ESP_LOGD(tag, format, ...) ESP_LOG_LEVEL_LOCAL(ESP_LOG_DEBUG,   tag, format, ##__VA_ARGS__)
+    #define ESP_LOGV(tag, format, ...) ESP_LOG_LEVEL_LOCAL(ESP_LOG_VERBOSE, tag, format, ##__VA_ARGS__)
+#else
+    // Logging is disabled
+    #define ESP_LOGE(tag, format, ...) ((void)0)
+    #define ESP_LOGW(tag, format, ...) ((void)0)
+    #define ESP_LOGI(tag, format, ...) ((void)0)
+    #define ESP_LOGD(tag, format, ...) ((void)0)
+    #define ESP_LOGV(tag, format, ...) ((void)0)
+#endif
 
 
 #define MAX_LEDS 2
@@ -227,7 +246,7 @@ const char *main_js =
 
 
 
-#include <ctype.h>
+
 
 
 
@@ -1438,7 +1457,7 @@ void stop_hotspot() {
     update_hotspot_led(false);
 }
 
-
+#if 0
 void test_eeprom_read_schedules(i2c_dev_t *eeprom_dev) {
     ESP_LOGI("EEPROM Test", "Starting EEPROM read test");
 
@@ -1475,7 +1494,7 @@ void test_eeprom_read_schedules(i2c_dev_t *eeprom_dev) {
 
     ESP_LOGI("EEPROM Test", "EEPROM read test completed");
 }
-
+#endif
 void switch_monitor_task(void *param) {
     gpio_set_direction(SWITCH_GPIO, GPIO_MODE_INPUT);
     gpio_pullup_en(SWITCH_GPIO); // Enable pull-up resistor for active-low input

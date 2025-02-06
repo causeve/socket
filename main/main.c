@@ -12,6 +12,25 @@
 #include "ui_scheduler.h"
 #include "esp_wifi.h"
 
+#define LOGGING_ENABLED 0  // 0-disable 1-enable
+
+#if LOGGING_ENABLED == 1
+    // Logging is enabled
+    #define ESP_LOGE(tag, format, ...) ESP_LOG_LEVEL_LOCAL(ESP_LOG_ERROR,   tag, format, ##__VA_ARGS__)
+    #define ESP_LOGW(tag, format, ...) ESP_LOG_LEVEL_LOCAL(ESP_LOG_WARN,    tag, format, ##__VA_ARGS__)
+    #define ESP_LOGI(tag, format, ...) ESP_LOG_LEVEL_LOCAL(ESP_LOG_INFO,    tag, format, ##__VA_ARGS__)
+    #define ESP_LOGD(tag, format, ...) ESP_LOG_LEVEL_LOCAL(ESP_LOG_DEBUG,   tag, format, ##__VA_ARGS__)
+    #define ESP_LOGV(tag, format, ...) ESP_LOG_LEVEL_LOCAL(ESP_LOG_VERBOSE, tag, format, ##__VA_ARGS__)
+#else
+    // Logging is disabled
+    #define ESP_LOGE(tag, format, ...) ((void)0)
+    #define ESP_LOGW(tag, format, ...) ((void)0)
+    #define ESP_LOGI(tag, format, ...) ((void)0)
+    #define ESP_LOGD(tag, format, ...) ((void)0)
+    #define ESP_LOGV(tag, format, ...) ((void)0)
+#endif
+
+
 
 #define CHECK_ARG(ARG) do { if (!(ARG)) return ESP_ERR_INVALID_ARG; } while (0)
  i2c_dev_t dev;

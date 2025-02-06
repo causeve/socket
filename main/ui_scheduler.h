@@ -12,6 +12,7 @@
 #define EEPROM_BASE_ADDRESS 0x0000
 
 
+
 void sync_ui_with_rtc_task(void *param) ;
 void switch_monitor_task(void *param);
 void start_http_server();
